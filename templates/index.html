@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='styles.css') }}"
+    />
+    <title>Image to Text Converter</title>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Image to Text Converter</h1>
+      <input
+        type="file"
+        id="imageUpload"
+        accept="image/*"
+        onchange="previewImage()"
+      />
+      <button onclick="convertToText()">Convert to Text</button>
+      <button onclick="clearHistory()">Clear</button>
+      <h2>Uploaded Image</h2>
+      <img
+        id="uploadedImage"
+        src=""
+        alt="Uploaded Image"
+        style="max-width: 100%; display: none"
+      />
+      <h2>Extracted Text</h2>
+      <textarea id="textOutput" rows="10" cols="50"></textarea>
+      <h2>History</h2>
+      <ul id="historyList"></ul>
+    </div>
+    <script>
+      function previewImage() {
+        const fileInput = document.getElementById("imageUpload");
+        const imgElement = document.getElementById("uploadedImage");
+        const file = fileInput.files[0];
+
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            imgElement.src = e.target.result;
+            imgElement.style.display = "block"; // Show the image
+          };
+          reader.readAsDataURL(file);
+        } else {
+          imgElement.src = "";
+          imgElement.style.display = "none"; // Hide the image if no file
+        }
+      }
+
+      async function convertToText() {
+        const fileInput = document.getElementById("imageUpload");
+        if (fileInput.files.length === 0) {
+          alert("Please upload an image first.");
+          return;
+        }
+        const formData = new FormData();
+        formData.append("image", fileInput.files[0]);
+
+        const response = await fetch("/convert", {
+          method: "POST",
+          body: formData,
+        });
+        const result = await response.json();
+        document.getElementById("textOutput").value = result.text;
+        addToHistory(result.text);
+      }
+
+      function addToHistory(text) {
+        const historyList = document.getElementById("historyList");
+        const listItem = document.createElement("li");
+        listItem.textContent = text;
+        historyList.appendChild(listItem);
+      }
+
+      function clearHistory() {
+        document.getElementById("textOutput").value = "";
+        document.getElementById("historyList").innerHTML = "";
+
+        const imgElement = document.getElementById("uploadedImage");
+        imgElement.src = "";
+        imgElement.style.display = "none"; // Hide the image
+      }
+    </script>
+  </body>
+</html>
