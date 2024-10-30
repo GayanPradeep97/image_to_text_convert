@@ -1,0 +1,166 @@
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from PIL import Image, ImageTk
+import pytesseract
+import cv2
+import numpy as np
+
+# Set the path to the Tesseract executable
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update this path if needed
+
+class ImageToTextConverter:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Image to Text Converter")
+        
+        # Set a background color
+        self.master.configure(bg='#f0f0f0')  # Light gray background
+
+        # Create a frame for the layout
+        self.frame = tk.Frame(master, bg='#f0f0f0')
+        self.frame.pack(padx=20, pady=20)
+
+        # Create a label to show the uploaded image
+        self.image_label = tk.Label(self.frame, bg='#f0f0f0')
+        self.image_label.grid(row=0, column=0, padx=10, pady=10)
+
+        # Create a button to upload the image
+        self.upload_button = tk.Button(self.frame, text="Upload Image", command=self.upload_image, bg='#4CAF50', fg='white', font=('Arial', 12))
+        self.upload_button.grid(row=1, column=0, padx=10, pady=5)
+
+        # Create a button to capture a photo
+        self.capture_button = tk.Button(self.frame, text="Capture Photo", command=self.open_camera_preview, bg='#FF9800', fg='white', font=('Arial', 12))
+        self.capture_button.grid(row=2, column=0, padx=10, pady=5)
+
+        # Create a button to convert the image to text
+        self.convert_button = tk.Button(self.frame, text="Convert to Text", command=self.convert_to_text, bg='#008CBA', fg='white', font=('Arial', 12))
+        self.convert_button.grid(row=3, column=0, padx=10, pady=5)
+
+        # Create a button to clear the image and text
+        self.clear_button = tk.Button(self.frame, text="Clear Image & Text", command=self.clear_image_text, bg='#f44336', fg='white', font=('Arial', 12))
+        self.clear_button.grid(row=4, column=0, padx=10, pady=5)
+
+        # Create a button to delete selected history
+        self.delete_button = tk.Button(self.frame, text="Delete Selected History", command=self.delete_selected_history, bg='#FFC107', fg='black', font=('Arial', 12))
+        self.delete_button.grid(row=5, column=0, padx=10, pady=5)
+
+        # Create a text widget to display the extracted text
+        self.text_output = tk.Text(self.frame, wrap=tk.WORD, width=50, height=15, font=('Arial', 12))
+        self.text_output.grid(row=6, column=0, padx=10, pady=10)
+
+        # Create a listbox to display the conversion history
+        self.history_listbox = tk.Listbox(self.frame, width=40, height=15, font=('Arial', 12))
+        self.history_listbox.grid(row=0, column=1, rowspan=7, padx=10, pady=10)
+
+        self.history_listbox.bind('<<ListboxSelect>>', self.show_history_text)
+
+        self.image = None  # Placeholder for the uploaded image
+        self.img_display = None  # Placeholder for the displayed image
+        self.history = []  # List to store conversion history
+        self.cap = None  # Camera variable
+
+    def upload_image(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg;*.jpeg;*.png;*.bmp;*.gif")])
+        if file_path:
+            self.image = Image.open(file_path)
+            self.display_image()  # Display the uploaded image
+            self.text_output.delete(1.0, tk.END)  # Clear previous text
+
+    def open_camera_preview(self):
+        self.camera_window = tk.Toplevel(self.master)
+        self.camera_window.title("Camera Preview")
+
+        # Create a label to show the camera feed
+        self.camera_label = tk.Label(self.camera_window)
+        self.camera_label.pack()
+
+        # Create a button to capture the photo
+        self.capture_photo_button = tk.Button(self.camera_window, text="Capture Photo", command=self.capture_photo, bg='#4CAF50', fg='white', font=('Arial', 12))
+        self.capture_photo_button.pack()
+
+        # Initialize camera
+        self.cap = cv2.VideoCapture(0)
+        if not self.cap.isOpened():
+            messagebox.showerror("Error", "Could not open camera.")
+            self.camera_window.destroy()
+            return
+
+        self.update_camera_feed()
+
+    def update_camera_feed(self):
+        ret, frame = self.cap.read()
+        if ret:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            self.camera_image = Image.fromarray(frame)
+            self.camera_photo = ImageTk.PhotoImage(self.camera_image)
+            self.camera_label.config(image=self.camera_photo)
+            self.camera_label.image = self.camera_photo
+        self.camera_label.after(10, self.update_camera_feed)
+
+    def capture_photo(self):
+        ret, frame = self.cap.read()
+        if ret:
+            self.image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            self.display_image()  # Display the captured image
+            self.text_output.delete(1.0, tk.END)  # Clear previous text
+            self.camera_window.destroy()  # Close the camera preview window
+            self.cap.release()  # Release the camera
+            self.cap = None  # Clear the camera variable
+        else:
+            messagebox.showerror("Error", "Could not capture image.")
+
+    def display_image(self):
+        # Resize the image for display
+        image_resized = self.image.resize((300, 300), Image.LANCZOS)  # Use LANCZOS for high-quality downsampling
+        self.img_display = ImageTk.PhotoImage(image_resized)
+        
+        self.image_label.config(image=self.img_display)  # Update the label with the image
+        self.image_label.image = self.img_display  # Keep a reference to avoid garbage collection
+
+    def convert_to_text(self):
+        if self.image:
+            try:
+                text = pytesseract.image_to_string(self.image)
+                if text.strip():
+                    self.text_output.delete(1.0, tk.END)  # Clear previous text
+                    self.text_output.insert(tk.END, text)  # Insert the extracted text
+                    # Add to history
+                    self.history.append(text)
+                    self.history_listbox.insert(tk.END, f"Image {len(self.history)}: Text Extracted")
+                else:
+                    messagebox.showinfo("Info", "No text was extracted from the image.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to convert image to text: {e}")
+        else:
+            messagebox.showwarning("Warning", "Please upload an image first.")
+
+    def clear_image_text(self):
+        # Clear the image and text output
+        self.image = None
+        self.img_display = None
+        self.image_label.config(image='')  # Remove the displayed image
+        self.text_output.delete(1.0, tk.END)  # Clear the text output
+
+    def delete_selected_history(self):
+        selection = self.history_listbox.curselection()
+        if selection:
+            index = selection[0]
+            del self.history[index]  # Remove from the history list
+            self.history_listbox.delete(index)  # Remove from the listbox
+        else:
+            messagebox.showwarning("Warning", "Please select a history item to delete.")
+
+    def show_history_text(self, event):
+        # Show the text of the selected history item in the text output
+        selection = self.history_listbox.curselection()
+        if selection:
+            index = selection[0]
+            self.text_output.delete(1.0, tk.END)  # Clear previous text
+            self.text_output.insert(tk.END, self.history[index])  # Show the selected history text
+
+# Create the main application window
+root = tk.Tk()
+app = ImageToTextConverter(root)
+
+# Run the application
+root.mainloop()
